@@ -82,15 +82,15 @@ def lfw_dataset(lfw_path, shape_img):
 
 
 def main():
-    dataset = 'lfw'
+    dataset = 'MNIST'
     root_path = '.'
-    data_path = os.path.join(root_path, '../data').replace('\\', '/')
+    data_path = os.path.join(root_path, 'data').replace('\\', '/')
     save_path = os.path.join(root_path, 'results/iDLG_%s'%dataset).replace('\\', '/')
     
     lr = 1.0
     num_dummy = 1
-    Iteration = 300
-    num_exp = 1000
+    Iteration = 100
+    num_exp = 10
 
     use_cuda = torch.cuda.is_available()
     device = 'cuda' if use_cuda else 'cpu'
@@ -115,7 +115,7 @@ def main():
         num_classes = 10
         channel = 1
         hidden = 588
-        dst = datasets.MNIST(data_path, download=False)
+        dst = datasets.MNIST(data_path, download=True)
 
     elif dataset == 'cifar100':
         shape_img = (32, 32)
@@ -124,6 +124,12 @@ def main():
         hidden = 768
         dst = datasets.CIFAR100(data_path, download=False)
 
+    elif dataset == 'cifar10':
+        shape_img = (32, 32)
+        num_classes = 10
+        channel = 3
+        hidden = 768
+        dst = datasets.CIFAR10(data_path, download=False)
 
     elif dataset == 'lfw':
         shape_img = (32, 32)
