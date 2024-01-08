@@ -24,6 +24,7 @@ from datetime import datetime
 
 start_time = time.perf_counter()
 
+
 class AnonLeNet(nn.Module):
     def __init__(self, num_classes=10, aug_indices=None, deanon_dim=None, rand_aug_indices=None):
         super(AnonLeNet, self).__init__()
@@ -61,6 +62,7 @@ class AnonLeNet(nn.Module):
             nn.ReLU(),
             nn.Linear(84, 10)
         )
+
     def forward(self, x):
         # out = self.anon_conv(x)
         out = self.lenet(x)
@@ -68,13 +70,38 @@ class AnonLeNet(nn.Module):
         out_fake = self.fake_net(x)
         return out, out_fake
 
+
+# class MyLeNet(nn.Module):
+#     def __init__(self, num_classes=10):
+#         super(MyLeNet, self).__init__()
+#
+#         self.anon_conv = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=0)
+#         self.lenet = nn.Sequential(
+#             nn.BatchNorm2d(6),
+#             nn.ReLU(),
+#             nn.MaxPool2d(kernel_size=2, stride=2),
+#             nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=0),
+#             nn.BatchNorm2d(16),
+#             nn.ReLU(),
+#             nn.MaxPool2d(kernel_size=2, stride=2),
+#             nn.Flatten(1),
+#             nn.Linear(256, 120),
+#             nn.ReLU(),
+#             nn.Linear(120, 84),
+#             nn.ReLU(),
+#             nn.Linear(84, 10)
+#         )
+#     def forward(self, x):
+#         out = self.anon_conv(x)
+#         out = self.lenet(out)
+#         return out
+
 class LeNet(nn.Module):
-    def __init__(self, channel=3, hideen=768, num_classes=10, aug_indices=None, rand_aug_indices=None):
+    def __init__(self, channel=3, hideen=768, num_classes=10):
         super(LeNet, self).__init__()
         act = nn.Sigmoid
         self.body = nn.Sequential(
-            AnonConv2d(channel, 12, kernel_size=5, stride=2, padding=5 // 2, aug_indices=aug_indices, deanon_dim=28),
-            # nn.Conv2d(channel, 12, kernel_size=5, padding=5 // 2, stride=2),
+            nn.Conv2d(channel, 12, kernel_size=5, padding=5 // 2, stride=2),
             act(),
             nn.Conv2d(12, 12, kernel_size=5, padding=5 // 2, stride=2),
             act(),
@@ -87,8 +114,7 @@ class LeNet(nn.Module):
 
         act_fake = nn.Sigmoid
         self.body_fake = nn.Sequential(
-            AnonConv2d(channel, 12, kernel_size=5, stride=2, padding=5 // 2, aug_indices=rand_aug_indices, deanon_dim=28),
-            # nn.Conv2d(channel, 12, kernel_size=5, padding=5 // 2, stride=2),
+            nn.Conv2d(channel, 12, kernel_size=5, padding=5 // 2, stride=2),
             act_fake(),
             nn.Conv2d(12, 12, kernel_size=5, padding=5 // 2, stride=2),
             act_fake(),
@@ -106,7 +132,8 @@ class LeNet(nn.Module):
         out_fake = out_fake.view(out.size(0), -1)
         out = self.fc(out)
         out_fake = self.fc(out_fake)
-        return out, out_fake
+        return out
+
 
 class AugDataset2(torch.utils.data.Dataset):
     def __init__(self, aug_dataset, original_dataset):
@@ -130,18 +157,17 @@ class AugDataset2(torch.utils.data.Dataset):
 
 
 def train(net, epoch, trainloader, device, optimizer, criterion):
-    
     train_losses = []
     train_accuracy = []
-    
+
     print('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
     correct = 0
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
-        all_outputs = net(inputs)
         inputs, targets = inputs.to(device), targets.to(device)
+        all_outputs = net(inputs)
         all_outputs = all_outputs if type(all_outputs) is tuple else [all_outputs]
         for idx, outputs in enumerate(all_outputs):
             optimizer[idx].zero_grad()
@@ -159,15 +185,14 @@ def train(net, epoch, trainloader, device, optimizer, criterion):
 
     train_losses.append(train_loss)
     train_accuracy.append(100. * correct / total)
-    
+
     return train_losses, train_accuracy
 
 
 def test(net, epoch, testloader, device, criterion):
-    
     test_losses = []
     test_accuracy = []
-    
+
     global best_acc
     net.eval()
     test_loss = 0
@@ -175,8 +200,8 @@ def test(net, epoch, testloader, device, criterion):
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
-            all_outputs = net(inputs)
             inputs, targets = inputs.to(device), targets.to(device)
+            all_outputs = net(inputs)
             all_outputs = all_outputs if type(all_outputs) is tuple else [all_outputs]
             for outputs in all_outputs:
                 loss = criterion(outputs, targets)
@@ -191,14 +216,15 @@ def test(net, epoch, testloader, device, criterion):
 
     test_losses.append(test_loss)
     test_accuracy.append(100. * correct / total)
-    
+
     return test_losses, test_accuracy
+
 
 def oggato_trainer():
     ds_name = 'MNIST'
-    aug_percent = 1.0
+    aug_percent = 0
     num_channel = 1
-    device='cuda'
+    device = 'cuda'
 
     original_trainset = torchvision.datasets.MNIST(root='data_torch',
                                                    train=True,
@@ -211,10 +237,10 @@ def oggato_trainer():
                                                   download=True)
 
     original_testloader = torch.utils.data.DataLoader(
-        original_testset, batch_size=128, shuffle=True, num_workers=2)
+        original_testset, batch_size=128, shuffle=False, num_workers=2)
 
     original_trainloader = torch.utils.data.DataLoader(
-        original_trainset, batch_size=128, shuffle=True, num_workers=2)
+        original_trainset, batch_size=128, shuffle=False, num_workers=2)
 
     if aug_percent > 0:
         aug_trainset = torch.load(f'aug_datasets/{ds_name}_train_{aug_percent}.pt')
@@ -238,27 +264,35 @@ def oggato_trainer():
 
         aug_indices = np.array(aug_indices)
         rand_aug_indices = []
-        rand_aug_indices.append(random.sample(range(0, 56*56), 2352))
+        rand_aug_indices.append(random.sample(range(0, 56 * 56), 2352))
 
-    net = LeNet() if aug_percent == 0 else AnonLeNet(aug_indices=aug_indices, deanon_dim=28, rand_aug_indices=rand_aug_indices)
-    # net = LeNet()
+    shape_img = (28, 28)
+    num_classes = 10
+    channel = 1
+    hidden = 588
+
+    net = LeNet(num_classes=num_classes, channel=channel, hideen=hidden) if aug_percent == 0 else AnonLeNet(aug_indices=aug_indices, deanon_dim=28,
+                                                     rand_aug_indices=rand_aug_indices)
+    # net = MyLeNet()
     # net = AnonResNet18(10, num_channel, aug_indices, 32, aug_percent)
     net = net.to(device)
     criterion = nn.CrossEntropyLoss()
 
     optimizers = []
-    optimizers.append(optim.SGD(net.lenet.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4))
-    optimizers.append(optim.SGD(net.fake_net.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4))
+    optimizers.append(optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4))
+    # optimizers.append(optim.SGD(net.fake_net.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4))
 
     # optimizer = optim.SGD(net.lenet.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
 
-    for epoch in range(1, 1 + 3):
+    for epoch in range(1, 1 + 10):
         if aug_percent > 0:
-            train_losses, train_accuracy = train(net, epoch, aug_trainloader, device=device, optimizer=optimizers, criterion=criterion)
+            train_losses, train_accuracy = train(net, epoch, aug_trainloader, device=device, optimizer=optimizers,
+                                                 criterion=criterion)
             test_losses, test_accuracy = test(net, epoch, aug_testloader, device=device, criterion=criterion)
             # scheduler.step()
         else:
-            train_losses, train_accuracy = train(net, epoch, original_trainloader, device=device, optimizer=optimizers, criterion=criterion)
+            train_losses, train_accuracy = train(net, epoch, original_trainloader, device=device, optimizer=optimizers,
+                                                 criterion=criterion)
             test_losses, test_accuracy = test(net, epoch, original_testloader, device=device, criterion=criterion)
             # scheduler.step()
 
@@ -283,58 +317,16 @@ def weights_init(m):
         print('warning: failed in weights_init for %s.bias' % m._get_name())
 
 if __name__ == '__main__':
-    ds_name = 'MNIST'
-    aug_percent = 1.0
-    num_channel = 1
-    device='cuda'
-
+    # net = oggato_trainer()
     num_classes = 10
     channel = 1
     hidden = 588
 
-    original_trainset = torchvision.datasets.MNIST(root='data_torch',
-                                                   train=True,
-                                                   transform=transforms.ToTensor(),
-                                                   download=True)
-
-    original_testset = torchvision.datasets.MNIST(root='data_torch',
-                                                  train=False,
-                                                  transform=transforms.ToTensor(),
-                                                  download=True)
-
-    original_testloader = torch.utils.data.DataLoader(
-        original_testset, batch_size=128, shuffle=True, num_workers=2)
-
-    original_trainloader = torch.utils.data.DataLoader(
-        original_trainset, batch_size=128, shuffle=True, num_workers=2)
-
-    aug_trainset = torch.load(f'aug_datasets/{ds_name}_train_{aug_percent}.pt')
-    aug_trainset = list(aug_trainset.parameters())[0]
-    aug_trainset = AugDataset2(aug_trainset, original_trainset)
-    aug_trainloader = torch.utils.data.DataLoader(aug_trainset, batch_size=128, shuffle=True, num_workers=2)
-
-    aug_testset = torch.load(f'aug_datasets/{ds_name}_test_{aug_percent}.pt')
-    aug_testset = list(aug_testset.parameters())[0]
-    aug_testset = AugDataset2(aug_testset, original_testset)
-    aug_testloader = torch.utils.data.DataLoader(aug_testset, batch_size=128, shuffle=True, num_workers=2)
-
-    aug_indices_all = torch.load(f'aug_datasets/{ds_name}_indices.pt')
-
-    aug_indices = []
-    for c in range(num_channel):
-        aug_index = aug_indices_all[4 - 1][c]
-        aug_index = aug_index.numpy().astype(int)
-        aug_index = aug_index[aug_index != 0]
-        aug_indices.append(aug_index)
-
-    aug_indices = np.array(aug_indices)
-    rand_aug_indices = []
-    rand_aug_indices.append(random.sample(range(0, 56 * 56), 2352))
-
-    net = LeNet(num_classes=num_classes, channel=channel, hideen=hidden, aug_indices=aug_indices, rand_aug_indices=rand_aug_indices)
+    net = LeNet(num_classes=num_classes, channel=channel, hideen=hidden)
     net.apply(weights_init)
+    net.to('cuda')
 
-    dst = aug_trainset
+    dst = torchvision.datasets.MNIST(root='data_torch', download=True)
 
     lr = 1.0
     num_dummy = 1
@@ -344,7 +336,7 @@ if __name__ == '__main__':
 
     dataset = 'MNIST'
     root_path = '.'
-    save_path = os.path.join(root_path, 'results/iDLG_%s'%dataset).replace('\\', '/')
+    save_path = os.path.join(root_path, 'results/iDLG_%s' % dataset).replace('\\', '/')
 
     if not os.path.exists('results'):
         os.mkdir('results')
@@ -367,8 +359,7 @@ if __name__ == '__main__':
         for imidx in range(num_dummy):
             idx = idx_shuffle[imidx]
             imidx_list.append(idx)
-            # tmp_datum = tt(dst[idx][0]).float().to(device)
-            tmp_datum = dst[idx][0].float().to(device)
+            tmp_datum = tt(dst[idx][0]).float().to(device)
             tmp_datum = tmp_datum.view(1, *tmp_datum.size())
             tmp_label = torch.Tensor([dst[idx][1]]).long().to(device)
             tmp_label = tmp_label.view(1, )
@@ -380,18 +371,10 @@ if __name__ == '__main__':
                 gt_label = torch.cat((gt_label, tmp_label), dim=0)
 
         # compute original gradient
-        out = net(gt_data)[0]
+        out = net(gt_data)
         y = criterion(out, gt_label)
-        dy_dx = torch.autograd.grad(y, net.parameters(), allow_unused=True)
-        # original_dy_dx = list((_.detach().clone() for _ in dy_dx))
-        original_dy_dx = []
-
-        for _ in dy_dx:
-            try:
-                clone = _.detach().clone()
-                original_dy_dx.append(clone)
-            except:
-                pass
+        dy_dx = torch.autograd.grad(y, net.parameters())
+        original_dy_dx = list((_.detach().clone() for _ in dy_dx))
 
         # generate dummy data and label
         dummy_data = torch.randn(gt_data.size()).to(device).requires_grad_(True)
@@ -416,7 +399,7 @@ if __name__ == '__main__':
 
             def closure():
                 optimizer.zero_grad()
-                pred = net(dummy_data)[0]
+                pred = net(dummy_data)
                 if method == 'DLG':
                     dummy_loss = - torch.mean(
                         torch.sum(torch.softmax(dummy_label, -1) * torch.log(torch.softmax(pred, -1)), dim=-1))
@@ -424,7 +407,7 @@ if __name__ == '__main__':
                 elif method == 'iDLG':
                     dummy_loss = criterion(pred, label_pred)
 
-                dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True, allow_unused=True)
+                dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
 
                 grad_diff = 0
                 for gx, gy in zip(dummy_dy_dx, original_dy_dx):
